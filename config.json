@@ -1,0 +1,22 @@
+{
+    "appId": "APP_ID",
+    "masterKey": "MASTER_KEY",
+    "appName": "APP_NAME",
+    "databaseURI": "mongodb://localhost/test",
+    "auth": {
+        "keycloak": {
+          "config": {
+            "realm": "tet",
+            "auth-server-url": "127.0.0.1",
+            "ssl-required": "none",
+            "resource": "tet",
+            "credentials": {
+              "secret": "aEPbTk7uLy1kVKrJvmECVk39taoiXpoM"
+            },
+            "use-resource-role-mappings": true,
+            "confidential-port": 0
+        
+          }
+        }
+      }
+  }
