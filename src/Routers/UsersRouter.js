@@ -12,7 +12,8 @@ import { promiseEnsureIdempotency } from '../middlewares';
 import RestWrite from '../RestWrite';
 import ResponseLike from 'responselike';
 const request = require('request');
-//const httpRequest = require('../Auth/httpRequest');
+import httpRequest from '../Adapters/Auth/httpsRequest'
+import querystring from 'node:querystring';
 
 export class UsersRouter extends ClassesRouter {
   className() {
@@ -182,17 +183,23 @@ export class UsersRouter extends ClassesRouter {
         }
       });
   }
-  async _getUserInfoKeyCloak(token) {
+  _getUserInfoKeyCloak = async (token) => {
     // const hostName = "localhost:80";
     // const path = "/realms/tet/protocol/openid-connect/userinfo"
-    const host = 'http://localhost:80/realms/tet/protocol/openid-connect/userinfo'
-    request.post(host, {
-      headers:{
+
+    const hostName = `localhost`;
+    const path = `/realms/tet/protocol/openid-connect/userinfo`;
+
+    const response = await httpRequest.request({
+      hostname: hostName,
+      port: 80,
+      method: 'POST',
+      path: path,
+      headers: {
         Authorization: 'Bearer ' + token,
       }
-    },(err,response, body)=>{
-      console.log(response.body);
     });
+    return response
   }
 
   async _handleLogin(req) {
@@ -208,26 +215,77 @@ export class UsersRouter extends ClassesRouter {
       const password = payload.password;
       const client_id = 'tet';
       const client_secret = 'EsI8QTPNINcApfI349yoJjxpzzTVy8zN';
-      const grant_type = 'password';
-      const host = 'http://localhost:80/realms/tet/protocol/openid-connect/token'
-      //      const hostName = config['auth-server-url'];
-      //      const path = `/realms/${config['realm']}/protocol/openid-connect/token`;
-      request.post(host, {
-        form: {
-          grant_type: grant_type,
-          username: username,
-          password: password,
-          client_id: client_id,
-          client_secret: client_secret
-        }
-      }, (err, response, body) => {
+      const granttype = 'password';
+      //      const host = '127.0.0.1/realms/tet/protocol/openid-connect/token'
+      const hostName = `localhost`;
+      const path = `/realms/tet/protocol/openid-connect/token`;
+      console.log(granttype);
+      var obj = {};
 
-        const data = JSON.parse(body);
-        console.log(data['access_token']);
-
-        const userInfo = this._getUserInfoKeyCloak(data['access_token']);
-       // console.log(userInfo);
+      const postData = querystring.stringify({
+        grant_type: granttype,
+        username: username,
+        password: password,
+        client_id: client_id,
+        client_secret: client_secret,
       });
+
+      const response = await httpRequest.request({
+        hostname: hostName,
+        port: 80,
+        method: 'POST',
+        path: path,
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded'
+        }
+      }, postData);
+      const access_token = response.access_token;
+      const userinfo = await this._getUserInfoKeyCloak(access_token);
+      console.log(userinfo);
+      // const data = JSON.parse(userinfo)
+
+      const id = userinfo.sub;
+      const roles = userinfo.roles;
+      const groups = userinfo.groups;
+      // let text = '{"authData": { "keycloak" : { '+
+      // ` "access_token": "${token}" ,`+
+      // ` "id": "${id}", `+
+      // ` "role": "[${roles}]" , `+
+      // ` "groups": "[${groups}]"}}}`;
+      const text = {
+        authData: {
+          keycloak: { access_token, id, roles, groups }
+        }
+      }
+      
+      const a = await httpRequest.request({
+        hostname: req.config.host,
+        port: req.config.port,
+        path: '/parse/users',
+        method: 'POST',
+        headers: {
+          'X-Parse-Application-Id': 'APP_ID',
+          'X-Parse-REST-API-Key': 'MASTER_KEY',
+          'X-Parse-Revocable-Session': 1,
+          'Content-Type': 'application/json'
+        }
+      }, JSON.stringify(text));
+      
+      console.log('data', a)
+      return { response: a };
+
+      // return httpRequest.request({
+      //   hostname: req.config.host,
+      //   port: req.config.port,
+      //   path: '/users',
+      //   method: 'POST',
+      //   headers: {
+      //     'X-Parse-Application-Id': 'APP_ID',
+      //     'X-Parse-REST-API-Key': 'MASTER_KEY',
+      //     'X-Parse-Revocable-Session': 1,
+      //     'Content-Type': 'application/json'
+      //   }
+      // }, JSON.stringify(text))
 
     } else {
       const user = await this._authenticateUserFromRequest(req);
@@ -502,38 +560,13 @@ export class UsersRouter extends ClassesRouter {
       });
     });
   }
-  _keycloak = async ({ req } = {}, { config } = {}) => {
-    const { username } = req.body.username;
-    const { password } = req.body.password;
-    const { client_id } = config['resource'];
-    const { client_secret } = config['credentials.secret'];
-    const { grant_type } = 'password';
-    const hostName = config['auth-server-url'];
-    const path = `/realms/${config['realm']}/protocol/openid-connect/token`;
-    response = request.post(`http:/` + hostName + path, {
-      form: {
-        grant_type: grant_type,
-        username: username,
-        password: password,
-        client_id: client_id,
-        client_secret: client_secret
-      }
-    })
-    console.log(response);
-    return { response: response };
-  }
-  handleKeycloak(req) {
-    this._keycloak(req)
-  }
+
   mountRoutes() {
     this.route('GET', '/users', req => {
       return this.handleFind(req);
     });
     this.route('POST', '/users', promiseEnsureIdempotency, req => {
       return this.handleCreate(req);
-    });
-    this.route('GET', '/keycloak', req => {
-      return this.handleKeycloak(req);
     });
     this.route('GET', '/users/me', req => {
       return this.handleMe(req);

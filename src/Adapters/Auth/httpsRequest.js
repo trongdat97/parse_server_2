@@ -31,7 +31,8 @@ function request(options, postData) {
   return new Promise((resolve, reject) => {
     const req = https.request(options, makeCallback(resolve, reject));
     req.on('error', reject);
-    req.write(postData);
+    if (postData)
+      req.write(postData);
     req.end();
   });
 }
